@@ -16,10 +16,11 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from .server import StarterChatServer
 from .workbook import generate_rent_workbook
-
+from dotenv import load_dotenv
+load_dotenv()
 logger = logging.getLogger(__name__)
 openai_client = OpenAI()
-MAIN_VECTOR_STORE_ID = os.environ.get("MAIN_VECTOR_STORE_ID")
+MAIN_VECTOR_STORE_ID = (os.environ.get("MAIN_VECTOR_STORE_ID") or "").strip().rstrip("%")
 
 REQUIRED_PROPERTY_IDS = [f"KN{index:02d}" for index in range(1, 11)]
 
@@ -66,7 +67,7 @@ RENT_WORKBOOK_PROPERTY_SCHEMA: Dict[str, Any] = {
             "items": RENT_WORKBOOK_ROW_SCHEMA,
         },
     },
-    "required": ["property_id", "rows", "period_months"],
+    "required": ["property_id", "property_address", "tenant_name", "period_months", "rows"],
     "additionalProperties": False,
 }
 
@@ -229,7 +230,7 @@ async def _fetch_rent_payload_from_vector_store() -> dict[str, Any]:
 
     def _call_responses() -> Any:
         return openai_client.responses.create(
-            model="gpt-5.1-mini",
+            model="gpt-5.1-codex-mini",
             instructions=VECTOR_FETCH_INSTRUCTIONS,
             input="Use the file_search tool to locate RENT_Payments_2025.txt and build the rent workbook payload.",
             tools=[file_search_tool],
@@ -291,7 +292,10 @@ async def rent_workbook_endpoint(payload: dict = Body(...)) -> Response:
             final_payload = await _fetch_rent_payload_from_vector_store()
         except Exception as exc:
             logger.exception("Vector store fetch failed")
-            raise HTTPException(status_code=502, detail="Failed to load rent workbook data") from exc
+            raise HTTPException(
+                status_code=502,
+                detail=f"Vector store fetch failed: {type(exc).__name__}: {exc}",
+            ) from exc
         used_vector_payload = True
 
     try:
@@ -315,4 +319,3 @@ async def rent_workbook_endpoint(payload: dict = Body(...)) -> Response:
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=headers,
     )
-
