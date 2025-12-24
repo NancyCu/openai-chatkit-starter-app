@@ -1,0 +1,26 @@
+{
+  "template_version": "property_rents_received_v1",
+  "year": 2025,
+  "properties": [
+    {
+      "property_id": "KN01",
+      "property_address": "",
+      "tenant_name": "",
+      "period_months": 12,
+      "rows": [
+        {"month_number": 1, "month": "Jan", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 2, "month": "Feb", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 3, "month": "Mar", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 4, "month": "Apr", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 5, "month": "May", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 6, "month": "Jun", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 7, "month": "Jul", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 8, "month": "Aug", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 9, "month": "Sep", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 10, "month": "Oct", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 11, "month": "Nov", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"},
+        {"month_number": 12, "month": "Dec", "rent_due": 0, "housing_dept": "", "housing_paid": 0, "tenant_paid": 0, "total_received": 0, "month_balance_due": 0, "year_balance_due": 0, "remarks": "Missing data"}
+      ]
+    }
+  ]
+}
