@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn[standard]>=0.36,<0.37",
     "openai>=1.40",
     "openai-chatkit>=1.4.0,<2",
+    "openpyxl>=3.1.0,<4",
 ]
 
 [project.optional-dependencies]
@@ -18,4 +19,3 @@ dev = [
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
-
