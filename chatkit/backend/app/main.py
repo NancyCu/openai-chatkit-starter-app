@@ -2,110 +2,30 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
+from typing import Any
+
 import logging
 import os
-from typing import Any, Dict
+from calendar import month_abbr
+from csv import DictReader
+from pathlib import Path
 
-from openai import OpenAI
-from chatkit.server import StreamingResult
-from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+
+from chatkit.server import StreamingResult
 
 from .server import StarterChatServer
 from .workbook import generate_rent_workbook
-from dotenv import load_dotenv
-load_dotenv()
+
 logger = logging.getLogger(__name__)
-openai_client = OpenAI()
-MAIN_VECTOR_STORE_ID = (os.environ.get("MAIN_VECTOR_STORE_ID") or "").strip().rstrip("%")
 
 REQUIRED_PROPERTY_IDS = [f"KN{index:02d}" for index in range(1, 11)]
-
-RENT_WORKBOOK_ROW_SCHEMA: Dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "month_number": {"type": "integer", "minimum": 1, "maximum": 12},
-        "month": {"type": "string"},
-        "rent_due": {"type": "number"},
-        "housing_dept": {"type": ["string", "null"]},
-        "housing_paid": {"type": "number"},
-        "tenant_paid": {"type": "number"},
-        "total_received": {"type": "number"},
-        "month_balance_due": {"type": "number"},
-        "year_balance_due": {"type": "number"},
-        "remarks": {"type": "string"},
-    },
-    "required": [
-        "month_number",
-        "month",
-        "rent_due",
-        "housing_dept",
-        "housing_paid",
-        "tenant_paid",
-        "total_received",
-        "month_balance_due",
-        "year_balance_due",
-        "remarks",
-    ],
-    "additionalProperties": False,
-}
-
-RENT_WORKBOOK_PROPERTY_SCHEMA: Dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "property_id": {"type": "string", "enum": REQUIRED_PROPERTY_IDS},
-        "property_address": {"type": ["string", "null"]},
-        "tenant_name": {"type": ["string", "null"]},
-        "period_months": {"type": "integer", "const": 12},
-        "rows": {
-            "type": "array",
-            "minItems": 12,
-            "maxItems": 12,
-            "items": RENT_WORKBOOK_ROW_SCHEMA,
-        },
-    },
-    "required": ["property_id", "property_address", "tenant_name", "period_months", "rows"],
-    "additionalProperties": False,
-}
-
-RENT_WORKBOOK_SCHEMA: Dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "template_version": {"type": "string", "const": "property_rents_received_v1"},
-        "year": {"type": "integer", "const": 2025},
-        "properties": {
-            "type": "array",
-            "minItems": len(REQUIRED_PROPERTY_IDS),
-            "maxItems": len(REQUIRED_PROPERTY_IDS),
-            "items": RENT_WORKBOOK_PROPERTY_SCHEMA,
-        },
-    },
-    "required": ["template_version", "year", "properties"],
-    "additionalProperties": False,
-}
-
-RENT_WORKBOOK_TEXT_FORMAT: Dict[str, Any] = {
-    "format": {
-        "type": "json_schema",
-        "name": "rent_workbook_payload",
-        "schema": RENT_WORKBOOK_SCHEMA,
-        "description": "Strict rent workbook payload (2025) covering KN01-KN10 with 12 rows per property.",
-        "strict": True,
-    }
-}
-
-VECTOR_FETCH_INSTRUCTIONS = (
-    "You are the RentWorkbookAgent. Use the file_search tool to open RENT_Payments_2025.txt"
-    " and return STRICT JSON only: template_version property_rents_received_v1, year 2025, and properties"
-    " KN01..KN10, each with 12 rows for months 1..12. Field mapping must match the RentWorkbookAgent mapping"
-    " (scheduled_rent_amount->rent_due, property_address->property_address, tenant_name->tenant_name, housing_dept->housing_dept,"
-    " housing_paid->housing_paid, tenant_paid->tenant_paid, total_received->total_received, month_balance_due->month_balance_due,"
-    " year_balance_due->year_balance_due, remarks->remarks). Map any differently named columns to the schema fields, keep rows in month order,"
-    " and when data is missing keep the row while setting numeric fields to 0 and remarks to 'Missing data'. No markdown, only the JSON payload."
-)
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+RENT_PAYMENTS_FILE_TEMPLATE = "RENT_Payments_{year}.txt"
+MONTH_NAMES = {index: month_abbr[index] for index in range(1, 13)}
+MISSING_DATA_REMARKS = "Missing data"
 
 app = FastAPI(title="ChatKit Starter API")
 
@@ -123,7 +43,7 @@ WORKFLOW_VERSION = os.environ.get("OPENAI_WORKFLOW_VERSION", "draft")
 chatkit_server = StarterChatServer()
 
 
-def _payload_needs_vector_data(payload: dict[str, Any]) -> bool:
+def _payload_needs_local_data(payload: dict[str, Any]) -> bool:
     properties = payload.get("properties")
     if not isinstance(properties, list):
         return True
@@ -219,45 +139,143 @@ def _validate_rent_payload(payload: dict[str, Any], context: str) -> None:
     logger.info("Payload validation succeeded (%s)", context)
 
 
-async def _fetch_rent_payload_from_vector_store() -> dict[str, Any]:
-    if not MAIN_VECTOR_STORE_ID:
-        raise RuntimeError("MAIN_VECTOR_STORE_ID is not configured")
-    file_search_tool = {
-        "type": "file_search",
-        "vector_store_ids": [MAIN_VECTOR_STORE_ID],
-        "max_num_results": 5,
+def _parse_numeric_value(
+    value: str | None, *, field: str, context: str
+) -> float:
+    raw = value or ""
+    cleaned = raw.strip().replace("$", "").replace(",", "")
+    if not cleaned:
+        return 0.0
+    try:
+        return float(cleaned)
+    except ValueError as exc:
+        raise ValueError(f"{context}: {field} is not a number ({value})") from exc
+
+
+def build_payload_from_local_tsv(year: int = 2025) -> dict[str, Any]:
+    file_path = DATA_DIR / RENT_PAYMENTS_FILE_TEMPLATE.format(year=year)
+    if not file_path.is_file():
+        raise FileNotFoundError(f"Missing data file: {file_path}")
+
+    property_rows: dict[str, dict] = {
+        prop_id: {
+            "property_address": None,
+            "tenant_name": None,
+            "rows": {},
+        }
+        for prop_id in REQUIRED_PROPERTY_IDS
     }
 
-    def _call_responses() -> Any:
-        return openai_client.responses.create(
-            model="gpt-5.2",
-            instructions=VECTOR_FETCH_INSTRUCTIONS,
-            input="Use the file_search tool to locate RENT_Payments_2025.txt and build the rent workbook payload.",
-            tools=[file_search_tool],
-            tool_choice={"type": "file_search"},
-            max_tool_calls=1,
-            include=["file_search_call.results"],
-            temperature=0.0,
-            text=RENT_WORKBOOK_TEXT_FORMAT,
+    with file_path.open(encoding="utf-8") as source:
+        reader = DictReader(source, delimiter="\t")
+        for row in reader:
+            property_id = (row.get("property_id") or "").strip()
+            if not property_id or property_id not in property_rows:
+                logger.debug("Skipping unsupported property_id=%s", property_id)
+                continue
+            month_number_raw = row.get("month_number")
+            try:
+                month_number = int(month_number_raw or "")
+            except ValueError:
+                logger.warning(
+                    "Skipping %s row with invalid month_number=%r", property_id, month_number_raw
+                )
+                continue
+            if not 1 <= month_number <= 12:
+                logger.warning("Skipping %s row with out-of-range month_number=%d", property_id, month_number)
+                continue
+
+            entry = property_rows[property_id]
+            address = (row.get("property_address") or "").strip()
+            if address:
+                entry["property_address"] = address
+            tenant = (row.get("tenant_name") or "").strip()
+            if tenant:
+                entry["tenant_name"] = tenant
+
+            month_rows = entry["rows"]
+            if month_number in month_rows:
+                logger.warning("Duplicate data for %s month %d; keeping first row", property_id, month_number)
+                continue
+
+            month_name = (row.get("month_name") or MONTH_NAMES.get(month_number, "")).strip()
+            month_rows[month_number] = {
+                "month_number": month_number,
+                "month": month_name or MONTH_NAMES[month_number],
+                "rent_due": _parse_numeric_value(
+                    row.get("scheduled_rent_amount"),
+                    field="scheduled_rent_amount",
+                    context=f"{property_id} month {month_number}",
+                ),
+                "housing_dept": (
+                    (row.get("housing_dept_name") or row.get("housing_dept") or "").strip()
+                    or MISSING_DATA_REMARKS
+                ),
+                "housing_paid": _parse_numeric_value(
+                    row.get("housing_amount_paid"),
+                    field="housing_amount_paid",
+                    context=f"{property_id} month {month_number}",
+                ),
+                "tenant_paid": _parse_numeric_value(
+                    row.get("tenant_amount_paid"),
+                    field="tenant_amount_paid",
+                    context=f"{property_id} month {month_number}",
+                ),
+                "total_received": _parse_numeric_value(
+                    row.get("total_amount_received"),
+                    field="total_amount_received",
+                    context=f"{property_id} month {month_number}",
+                ),
+                "month_balance_due": _parse_numeric_value(
+                    row.get("month_balance_due"),
+                    field="month_balance_due",
+                    context=f"{property_id} month {month_number}",
+                ),
+                "year_balance_due": _parse_numeric_value(
+                    row.get("year_balance_due"),
+                    field="year_balance_due",
+                    context=f"{property_id} month {month_number}",
+                ),
+                "remarks": (row.get("notes") or "").strip(),
+            }
+
+    properties: list[dict[str, Any]] = []
+    for property_id in REQUIRED_PROPERTY_IDS:
+        entry = property_rows[property_id]
+        rows = []
+        for month_number in range(1, 13):
+            month_entry = entry["rows"].get(month_number)
+            if month_entry is None:
+                month_entry = {
+                    "month_number": month_number,
+                    "month": MONTH_NAMES[month_number],
+                    "rent_due": 0.0,
+                    "housing_dept": MISSING_DATA_REMARKS,
+                    "housing_paid": 0.0,
+                    "tenant_paid": 0.0,
+                    "total_received": 0.0,
+                    "month_balance_due": 0.0,
+                    "year_balance_due": 0.0,
+                    "remarks": MISSING_DATA_REMARKS,
+                }
+            rows.append(month_entry)
+
+        properties.append(
+            {
+                "property_id": property_id,
+                "property_address": entry["property_address"] or MISSING_DATA_REMARKS,
+                "tenant_name": entry["tenant_name"] or MISSING_DATA_REMARKS,
+                "period_months": 12,
+                "rows": rows,
+            }
         )
 
-    response = await asyncio.to_thread(_call_responses)
-    file_search_items = [
-        item for item in response.output if getattr(item, "type", "") == "file_search_call"
-    ]
-    result_count = sum(len(item.results or []) for item in file_search_items)
-    logger.info("Vector store fetch succeeded (file_search results=%d)", result_count)
-
-    text_output = response.output_text.strip()
-    if not text_output:
-        raise ValueError("Vector store response did not contain output text")
-    try:
-        payload = json.loads(text_output)
-    except json.JSONDecodeError as exc:
-        raise ValueError("Vector store response is not valid JSON") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("Vector store response must be a JSON object")
-    return payload
+    logger.info("Rebuilt rent payload from %s", file_path)
+    return {
+        "template_version": "property_rents_received_v1",
+        "year": year,
+        "properties": properties,
+    }
 
 
 @app.post("/chatkit")
@@ -285,21 +303,22 @@ async def rent_workbook_endpoint(payload: dict = Body(...)) -> Response:
     """Generate a rent workbook and return it as a binary download."""
 
     final_payload = payload
-    used_vector_payload = False
-    if _payload_needs_vector_data(payload):
-        logger.info("Payload missing data; fetching RENT_Payments_2025 from vector store")
+    rebuilt_from_local = False
+    if _payload_needs_local_data(payload):
+        logger.info("Payload missing data; rebuilding from local TSV")
         try:
-            final_payload = await _fetch_rent_payload_from_vector_store()
-        except Exception as exc:
-            logger.exception("Vector store fetch failed")
-            raise HTTPException(
-                status_code=502,
-                detail=f"Vector store fetch failed: {type(exc).__name__}: {exc}",
-            ) from exc
-        used_vector_payload = True
+            final_payload = build_payload_from_local_tsv()
+        except FileNotFoundError as exc:
+            logger.exception("Local rent data file missing")
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except ValueError as exc:
+            logger.exception("Local rent data parsing failed")
+            raise HTTPException(status_code=500, detail=f"Local data error: {exc}") from exc
+        rebuilt_from_local = True
 
+    context = "local TSV" if rebuilt_from_local else "client payload"
     try:
-        _validate_rent_payload(final_payload, "vector store" if used_vector_payload else "client payload")
+        _validate_rent_payload(final_payload, context)
         excel_bytes = generate_rent_workbook(final_payload)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
