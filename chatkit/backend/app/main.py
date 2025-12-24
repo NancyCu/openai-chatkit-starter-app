@@ -230,7 +230,7 @@ async def _fetch_rent_payload_from_vector_store() -> dict[str, Any]:
 
     def _call_responses() -> Any:
         return openai_client.responses.create(
-            model="gpt-5.1-codex-mini",
+            model="gpt-5.2",
             instructions=VECTOR_FETCH_INSTRUCTIONS,
             input="Use the file_search tool to locate RENT_Payments_2025.txt and build the rent workbook payload.",
             tools=[file_search_tool],
