@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from chatkit.server import StreamingResult
 
@@ -29,15 +30,6 @@ MISSING_DATA_REMARKS = "Missing data"
 
 app = FastAPI(title="ChatKit Starter API")
 
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import os
-
-# Serve Vite build output
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-
-if os.path.isdir(STATIC_DIR):
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -348,3 +340,9 @@ async def rent_workbook_endpoint(payload: dict = Body(...)) -> Response:
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=headers,
     )
+
+
+# ---- Serve built frontend (SPA) AFTER API routes so /api/* keeps working ----
+STATIC_DIR = Path(__file__).parent / "static"
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
