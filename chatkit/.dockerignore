@@ -1,43 +1,18 @@
-# flyctl launch added from .gitignore
-**/node_modules
-**/.env*
-!**/.env.example
+app = "knhomes-chatkit"
 
-# flyctl launch added from .venv/.gitignore
-.venv/**/*
+[build]
+  image = "knhomes-chatkit:latest"
 
-# flyctl launch added from backend/.gitignore
-backend/**/__pycache__
-backend/**/*.py[cod]
-backend/**/*.egg-info
-backend/**/.venv
-backend/**/.env
-backend/**/.ruff_cache
-backend/**/.pytest_cache
-backend/**/.coverage
-backend/**/*.log
+[processes]
+  app = "uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips=*"
 
-# flyctl launch added from backend/.venv/.gitignore
-# Created by venv; see https://docs.python.org/3/library/venv.html
-backend/.venv/**/*
+[env]
 
-# flyctl launch added from backend/venv/.gitignore
-# Created by venv; see https://docs.python.org/3/library/venv.html
-backend/venv/**/*
+[experimental]
 
-# flyctl launch added from frontend/.gitignore
-frontend/**/node_modules
-frontend/**/dist
-frontend/**/.DS_Store
-frontend/**/.next
-frontend/**/npm-debug.log*
-frontend/**/*.tsbuildinfo
-frontend/**/next-env.d.ts
-
-# Ensure backend/frontend source, template, and data ARE included in the Docker build context
-!backend/**
-!frontend/**
-!backend/templates/**
-!backend/templates/Property_Rents_Received_Template.xlsx
-!backend/data/**
-!backend/data/RENT_Payments_2025.txt
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
