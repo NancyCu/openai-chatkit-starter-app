@@ -1,27 +1,31 @@
-from pathlib import Path
-from openpyxl import load_workbook
+# Stage 1: build the Vite frontend
+FROM node:20.18.0-slim AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+COPY frontend ./
+RUN npm run build
 
-TEMPLATE_FILENAME = "Property_Rents_Received_Template.xlsx"
+# Stage 2: package the FastAPI backend with the built assets
+FROM python:3.12.0-slim
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
+# Make sure pip tooling is current
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-def resolve_template_path() -> Path:
-    """Resolve the workbook template path in local dev and in Fly container."""
-    candidates = [
-        # legacy location (some deployments)
-        Path("/app/templates") / TEMPLATE_FILENAME,
-        # Fly/container location when backend is copied to /app/backend
-        Path("/app/backend/templates") / TEMPLATE_FILENAME,
-        # repo/dev location (backend/templates)
-        Path(__file__).resolve().parents[1] / "templates" / TEMPLATE_FILENAME,
-    ]
-    for path in candidates:
-        if path.is_file():
-            return path
-    raise FileNotFoundError(f"Template not found. Tried: {', '.join(str(p) for p in candidates)}")
+# Copy backend code and template data before installing dependencies
+COPY backend/pyproject.toml backend/pyproject.toml
+COPY backend ./backend
+COPY templates ./templates
 
+# Install the backend package and its dependencies
+RUN pip install --no-cache-dir /app/backend
 
-def load_rent_workbook():
-    template_path = resolve_template_path()
-    return load_workbook(template_path)
+# Copy built frontend assets into the backend static directory
+RUN mkdir -p backend/app/static
+COPY --from=frontend-build /app/frontend/dist backend/app/static
 
-# rest of the code that uses load_rent_workbook() instead of directly loading the template path
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
