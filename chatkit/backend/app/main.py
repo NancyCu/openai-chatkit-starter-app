@@ -141,9 +141,7 @@ def _validate_rent_payload(payload: dict[str, Any], context: str) -> None:
     logger.info("Payload validation succeeded (%s)", context)
 
 
-def _parse_numeric_value(
-    value: str | None, *, field: str, context: str
-) -> float:
+def _parse_numeric_value(value: str | None, *, field: str, context: str) -> float:
     raw = value or ""
     cleaned = raw.strip().replace("$", "").replace(",", "")
     if not cleaned:
@@ -180,11 +178,17 @@ def build_payload_from_local_tsv(year: int = 2025) -> dict[str, Any]:
                 month_number = int(month_number_raw or "")
             except ValueError:
                 logger.warning(
-                    "Skipping %s row with invalid month_number=%r", property_id, month_number_raw
+                    "Skipping %s row with invalid month_number=%r",
+                    property_id,
+                    month_number_raw,
                 )
                 continue
             if not 1 <= month_number <= 12:
-                logger.warning("Skipping %s row with out-of-range month_number=%d", property_id, month_number)
+                logger.warning(
+                    "Skipping %s row with out-of-range month_number=%d",
+                    property_id,
+                    month_number,
+                )
                 continue
 
             entry = property_rows[property_id]
@@ -197,7 +201,11 @@ def build_payload_from_local_tsv(year: int = 2025) -> dict[str, Any]:
 
             month_rows = entry["rows"]
             if month_number in month_rows:
-                logger.warning("Duplicate data for %s month %d; keeping first row", property_id, month_number)
+                logger.warning(
+                    "Duplicate data for %s month %d; keeping first row",
+                    property_id,
+                    month_number,
+                )
                 continue
 
             month_name = (row.get("month_name") or MONTH_NAMES.get(month_number, "")).strip()
@@ -351,11 +359,13 @@ INDEX_FILE = STATIC_DIR / "index.html"
 if ASSETS_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
+
 @app.get("/")
 def spa_root() -> Response:
     if INDEX_FILE.is_file():
         return FileResponse(str(INDEX_FILE))
     raise HTTPException(status_code=404, detail="Frontend not built")
+
 
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str) -> Response:
