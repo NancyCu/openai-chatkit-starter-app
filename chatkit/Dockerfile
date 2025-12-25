@@ -20,12 +20,11 @@ COPY backend/pyproject.toml backend/pyproject.toml
 COPY backend ./backend
 COPY templates ./templates
 
+# Copy built frontend assets into the backend static directory
+COPY --from=frontend-build /app/frontend/dist /app/backend/app/static
+
 # Install the backend package and its dependencies
 RUN pip install --no-cache-dir /app/backend
-
-# Copy built frontend assets into the backend static directory
-RUN mkdir -p backend/app/static
-COPY --from=frontend-build /app/frontend/dist backend/app/static
 
 EXPOSE 8080
 
