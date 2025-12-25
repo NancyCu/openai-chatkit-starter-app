@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from chatkit.server import StreamingResult
@@ -342,7 +342,27 @@ async def rent_workbook_endpoint(payload: dict = Body(...)) -> Response:
     )
 
 
-# ---- Serve built frontend (SPA) AFTER API routes so /api/* keeps working ----
+# ---- Serve built frontend (SPA) without intercepting POST /api/* ----
 STATIC_DIR = Path(__file__).parent / "static"
-if STATIC_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+ASSETS_DIR = STATIC_DIR / "assets"
+INDEX_FILE = STATIC_DIR / "index.html"
+
+# Vite build references /assets/* by default
+if ASSETS_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+
+@app.get("/")
+def spa_root() -> Response:
+    if INDEX_FILE.is_file():
+        return FileResponse(str(INDEX_FILE))
+    raise HTTPException(status_code=404, detail="Frontend not built")
+
+@app.get("/{full_path:path}")
+def spa_fallback(full_path: str) -> Response:
+    # Never hijack API/docs routes
+    if full_path.startswith("api/") or full_path.startswith("chatkit") or full_path.startswith("docs") or full_path.startswith("openapi") or full_path.startswith("redoc"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if INDEX_FILE.is_file():
+        return FileResponse(str(INDEX_FILE))
+    raise HTTPException(status_code=404, detail="Frontend not built")
