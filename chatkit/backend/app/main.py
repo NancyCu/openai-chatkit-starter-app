@@ -29,6 +29,16 @@ MISSING_DATA_REMARKS = "Missing data"
 
 app = FastAPI(title="ChatKit Starter API")
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+
+# Serve Vite build output
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
+if os.path.isdir(STATIC_DIR):
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
