@@ -1,25 +1,27 @@
-# ---- build frontend ----
-FROM node:20-alpine AS web
-WORKDIR /web
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ ./
-RUN npm run build
+from pathlib import Path
+from openpyxl import load_workbook
 
-# ---- backend runtime ----
-FROM python:3.11-slim AS api
-WORKDIR /app
+TEMPLATE_FILENAME = "Property_Rents_Received_Template.xlsx"
 
-COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
 
-COPY backend/ ./backend/
-# ✅ add this line so `import app.*` works
-ENV PYTHONPATH=/app/backend
+def resolve_template_path() -> Path:
+    """Resolve the workbook template path in local dev and in Fly container."""
+    candidates = [
+        # legacy location (some deployments)
+        Path("/app/templates") / TEMPLATE_FILENAME,
+        # Fly/container location when backend is copied to /app/backend
+        Path("/app/backend/templates") / TEMPLATE_FILENAME,
+        # repo/dev location (backend/templates)
+        Path(__file__).resolve().parents[1] / "templates" / TEMPLATE_FILENAME,
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path
+    raise FileNotFoundError(f"Template not found. Tried: {', '.join(str(p) for p in candidates)}")
 
-# copy built frontend into backend static folder
-RUN mkdir -p /app/backend/app/static
-COPY --from=web /web/dist /app/backend/app/static
 
-EXPOSE 8080
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+def load_rent_workbook():
+    template_path = resolve_template_path()
+    return load_workbook(template_path)
+
+# rest of the code that uses load_rent_workbook() instead of directly loading the template path

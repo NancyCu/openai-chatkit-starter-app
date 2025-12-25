@@ -34,3 +34,11 @@ frontend/**/npm-debug.log*
 frontend/**/*.tsbuildinfo
 frontend/**/next-env.d.ts
 fly.toml
+
+!backend/**
+!frontend/**
+!backend/templates/**
+!backend/templates/Property_Rents_Received_Template.xlsx
+
+!backend/data/**
+!backend/data/RENT_Payments_2025.txt
