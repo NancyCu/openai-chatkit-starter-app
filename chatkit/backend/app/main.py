@@ -360,14 +360,14 @@ if ASSETS_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def spa_root() -> Response:
     if INDEX_FILE.is_file():
         return FileResponse(str(INDEX_FILE))
     raise HTTPException(status_code=404, detail="Frontend not built")
 
 
-@app.get("/{full_path:path}")
+@app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
 def spa_fallback(full_path: str) -> Response:
     # Never hijack API/docs routes
     if full_path.startswith("api/") or full_path.startswith("chatkit") or full_path.startswith("docs") or full_path.startswith("openapi") or full_path.startswith("redoc"):
