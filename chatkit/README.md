@@ -25,6 +25,19 @@ Set `OPENAI_API_KEY` in your shell or in `.env.local` at the repo root before
 running the backend. Register a production domain key in the OpenAI dashboard
 and set `VITE_CHATKIT_API_DOMAIN_KEY` when deploying.
 
+## Frontend environment setup
+
+Create `frontend/.env` (or `frontend/.env.local`) with these placeholders and
+replace them with your real values before building the frontend:
+
+```bash
+VITE_CHATKIT_API_DOMAIN_KEY=domain_pk_your_domain_key_here
+VITE_CHATKIT_API_URL=/chatkit
+```
+
+> Note: `OPENAI_API_KEY` must **never** be placed in the frontend. Keep it in
+> `.env.local` at the repo root (backend only).
+
 ## Customize
 
 - Update UI and connection settings in `frontend/src/lib/config.ts`.
@@ -88,4 +101,3 @@ This downloads `Rent_Workbook_2025.xlsx` with data populated from the template.
 **Full test with all 10 properties (KN01-KN10) and 12 months each:**
 
 See `test_rent_workbook.sh` for a complete example with 120 rows.
-
